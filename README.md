@@ -20,9 +20,9 @@ GAN/
 
 | Model       | Architecture           | Dataset | Status  |
 |-------------|------------------------|---------|---------|
-| Vanilla GAN | Fully-connected layers | MNIST   | ✅ Ready |
-| CGAN        | Conditional GAN        | —       | 🔜 Soon |
-| DCGAN       | Deep Convolutional GAN | —       | 🔜 Soon |
+| Vanilla GAN | Fully-connected layers | MNIST   | Ready   |
+| CGAN        | Conditional GAN        | MNIST   | -----   |
+| DCGAN       | Deep Convolutional GAN | MNIST   | Ready   |
 
 ## Setup
 
