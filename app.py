@@ -24,6 +24,12 @@ model_cfg = available[model_name]
 st.sidebar.caption(model_cfg["description"])
 st.sidebar.markdown(f"**Device:** {device}")
 
+is_conditional = model_cfg.get("conditional", False)
+if is_conditional:
+    label = st.sidebar.number_input(
+        "Digit to generate (0–9)", min_value=0, max_value=9, value=0, step=1
+    )
+
 
 # ---- Load generator (cached across reruns) ----
 @st.cache_resource
@@ -56,7 +62,8 @@ with tab_upload:
 
     if uploaded_files:
         num = len(uploaded_files)
-        gen_imgs = model_cfg["generate_fn"](generator, num, device)
+        gen_kwargs = {"label": label} if is_conditional else {}
+        gen_imgs = model_cfg["generate_fn"](generator, num, device, **gen_kwargs)
 
         st.subheader(f"Results ({num} image{'s' if num > 1 else ''})")
 
@@ -76,7 +83,8 @@ with tab_quick:
     num_gen = st.slider("Number of images to generate", 1, 16, 4)
 
     if st.button("Generate"):
-        gen_imgs = model_cfg["generate_fn"](generator, num_gen, device)
+        gen_kwargs = {"label": label} if is_conditional else {}
+        gen_imgs = model_cfg["generate_fn"](generator, num_gen, device, **gen_kwargs)
 
         cols = st.columns(min(num_gen, 4))
         for idx, gi in enumerate(gen_imgs):

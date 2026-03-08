@@ -8,6 +8,10 @@ from models.dcgan import (
     load_generator as _load_dcgan,
     generate as _gen_dcgan,
 )
+from models.cgan import (
+    load_generator as _load_cgan,
+    generate as _gen_cgan,
+)
 
 # ---------------------------------------------------------------------------
 # Model Registry
@@ -31,19 +35,15 @@ MODEL_REGISTRY = {
         "load_fn": _load_dcgan,
         "generate_fn": _gen_dcgan,
         "description": "Deep Convolutional GAN trained on MNIST (28×28 grayscale)",
+        "conditional": False,
     },
-    # "CGAN": {
-    #     "checkpoint": "cgan.pth",
-    #     "load_fn": _load_cgan,
-    #     "generate_fn": _gen_cgan,
-    #     "description": "Conditional GAN trained on MNIST",
-    # },
-    # "DCGAN": {
-    #     "checkpoint": "dcgan.pth",
-    #     "load_fn": _load_dcgan,
-    #     "generate_fn": _gen_dcgan,
-    #     "description": "Deep Convolutional GAN",
-    # },
+    "CGAN": {
+        "checkpoint": "cgan.pth",
+        "load_fn": _load_cgan,
+        "generate_fn": _gen_cgan,
+        "description": "Conditional GAN trained on MNIST — generates a specific digit (0–9)",
+        "conditional": True,
+    },
 }
 
 SAVED_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "saved_models")
