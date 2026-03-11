@@ -31,6 +31,38 @@ def load_generator(checkpoint_path, device):
     return gen
 
 
+class Discriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(IMG_CHANNELS, 128, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(128, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(256, 1, 7, 1, 0, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, img):
+        return self.net(img).view(-1, 1)
+
+
+def load_discriminator(checkpoint_path, device):
+    disc = Discriminator().to(device)
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    disc.load_state_dict(ckpt["discriminator_state_dict"])
+    disc.eval()
+    return disc
+
+
+def predict(discriminator, img_tensor, device, **kwargs):
+    img_tensor = img_tensor.to(device)
+    with torch.no_grad():
+        score = discriminator(img_tensor)
+    return score.item()
+
+
 def generate(generator, num_images, device, **kwargs):
     z = torch.randn(num_images, LATENT_DIM, 1, 1, device=device)
     with torch.no_grad():

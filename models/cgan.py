@@ -36,6 +36,42 @@ def load_generator(checkpoint_path, device):
     return gen
 
 
+class Discriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.label_emb = nn.Embedding(NUM_CLASSES, NUM_CLASSES)
+        self.model = nn.Sequential(
+            nn.Linear(28 * 28 + NUM_CLASSES, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, img, labels):
+        img = img.view(img.size(0), -1)
+        c = self.label_emb(labels)
+        x = torch.cat([img, c], dim=1)
+        return self.model(x)
+
+
+def load_discriminator(checkpoint_path, device):
+    disc = Discriminator().to(device)
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    disc.load_state_dict(ckpt["discriminator_state_dict"])
+    disc.eval()
+    return disc
+
+
+def predict(discriminator, img_tensor, device, label=0, **kwargs):
+    img_tensor = img_tensor.to(device)
+    labels = torch.full((img_tensor.size(0),), label, dtype=torch.long, device=device)
+    with torch.no_grad():
+        score = discriminator(img_tensor, labels)
+    return score.item()
+
+
 def generate(generator, num_images, device, label=0, **kwargs):
     z = torch.randn(num_images, LATENT_DIM, device=device)
     labels = torch.full((num_images,), label, dtype=torch.long, device=device)

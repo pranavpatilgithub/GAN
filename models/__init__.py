@@ -2,15 +2,21 @@ import os
 
 from models.vanilla_gan import (
     load_generator as _load_vanilla,
+    load_discriminator as _load_disc_vanilla,
     generate as _gen_vanilla,
+    predict as _pred_vanilla,
 )
 from models.dcgan import (
     load_generator as _load_dcgan,
+    load_discriminator as _load_disc_dcgan,
     generate as _gen_dcgan,
+    predict as _pred_dcgan,
 )
 from models.cgan import (
     load_generator as _load_cgan,
+    load_discriminator as _load_disc_cgan,
     generate as _gen_cgan,
+    predict as _pred_cgan,
 )
 
 # ---------------------------------------------------------------------------
@@ -27,20 +33,26 @@ MODEL_REGISTRY = {
     "Vanilla GAN": {
         "checkpoint": "vanilla_gan.pth",
         "load_fn": _load_vanilla,
+        "load_disc_fn": _load_disc_vanilla,
         "generate_fn": _gen_vanilla,
+        "predict_fn": _pred_vanilla,
         "description": "Fully-connected GAN trained on MNIST (28×28 grayscale)",
     },
     "DCGAN": {
         "checkpoint": "dcgan.pth",
         "load_fn": _load_dcgan,
+        "load_disc_fn": _load_disc_dcgan,
         "generate_fn": _gen_dcgan,
+        "predict_fn": _pred_dcgan,
         "description": "Deep Convolutional GAN trained on MNIST (28×28 grayscale)",
         "conditional": False,
     },
     "CGAN": {
         "checkpoint": "cgan.pth",
         "load_fn": _load_cgan,
+        "load_disc_fn": _load_disc_cgan,
         "generate_fn": _gen_cgan,
+        "predict_fn": _pred_cgan,
         "description": "Conditional GAN trained on MNIST — generates a specific digit (0–9)",
         "conditional": True,
     },

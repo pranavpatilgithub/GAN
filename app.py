@@ -2,6 +2,7 @@ import streamlit as st
 import torch
 import numpy as np
 from PIL import Image
+import torchvision.transforms as T
 
 from models import get_available_models
 
@@ -40,6 +41,23 @@ def load_model(name, path, _load_fn):
 generator = load_model(model_name, model_cfg["checkpoint_path"], model_cfg["load_fn"])
 
 
+@st.cache_resource
+def load_disc(name, path, _load_disc_fn):
+    return _load_disc_fn(path, device)
+
+
+discriminator = load_disc(model_name, model_cfg["checkpoint_path"], model_cfg["load_disc_fn"])
+
+
+# ---- Preprocess uploaded image for discriminator ----
+preprocess = T.Compose([
+    T.Grayscale(num_output_channels=1),
+    T.Resize((28, 28)),
+    T.ToTensor(),
+    T.Normalize([0.5], [0.5]),
+])
+
+
 # ---- Helper: tensor → displayable numpy ----
 def to_display(img_tensor):
     """Convert a single CHW tensor in [0,1] to a numpy array for st.image."""
@@ -50,7 +68,7 @@ def to_display(img_tensor):
 
 
 # ---- Tabs ----
-tab_upload, tab_quick = st.tabs(["Upload & Generate", "Quick Generate"])
+tab_upload, tab_quick, tab_realfake = st.tabs(["Upload & Generate", "Quick Generate", "Real or Fake?"])
 
 # -- Tab 1: Upload images → generate same count --
 with tab_upload:
@@ -90,3 +108,35 @@ with tab_quick:
         for idx, gi in enumerate(gen_imgs):
             with cols[idx % 4]:
                 st.image(to_display(gi), use_container_width=True, clamp=True)
+
+# -- Tab 3: Discriminator predicts Real or Fake --
+with tab_realfake:
+    st.subheader("Discriminator: Real or Fake?")
+    st.caption("Upload image(s) and the discriminator will predict whether each is real or fake.")
+
+    judge_files = st.file_uploader(
+        "Upload image(s) to judge",
+        type=["png", "jpg", "jpeg", "bmp"],
+        accept_multiple_files=True,
+        key="judge_uploader",
+    )
+
+    if judge_files:
+        for uf in judge_files:
+            img = Image.open(uf)
+            img_tensor = preprocess(img).unsqueeze(0)  # (1, 1, 28, 28)
+
+            pred_kwargs = {"label": label} if is_conditional else {}
+            score = model_cfg["predict_fn"](discriminator, img_tensor, device, **pred_kwargs)
+
+            verdict = "Real" if score > 0.5 else "Fake"
+            color = "green" if score > 0.5 else "red"
+
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.image(img, use_container_width=True)
+            with col2:
+                st.markdown(f"### :{color}[{verdict}]")
+                st.progress(score)
+                st.caption(f"Confidence score: {score:.4f} (>0.5 = Real, ≤0.5 = Fake)")
+            st.divider()
