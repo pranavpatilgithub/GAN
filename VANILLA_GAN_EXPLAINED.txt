@@ -1,0 +1,931 @@
+================================================================================
+      VANILLA GAN — COMPLETE BEGINNER-FRIENDLY LINE-BY-LINE EXPLANATION
+================================================================================
+
+
+================================================================================
+SECTION 1: IMPORTS (Lines 1-10)
+================================================================================
+
+import torch
+────────────
+  - torch is PyTorch — the deep learning framework.
+  - Think of it as the "engine" that does all the math (matrix multiplication,
+    gradient computation, GPU acceleration).
+  - We use it to create tensors (multi-dimensional arrays), build neural
+    networks, and train them.
+
+import torch.nn as nn
+──────────────────────
+  - torch.nn is the "neural network" module.
+  - Contains ready-made building blocks:
+      nn.Linear   → fully connected layer (like y = Wx + b)
+      nn.LeakyReLU → activation function
+      nn.Sigmoid  → squashes output to [0, 1]
+      nn.Tanh     → squashes output to [-1, 1]
+      nn.Sequential → chains layers in order
+      nn.BCELoss  → Binary Cross-Entropy loss function
+  - "as nn" is just a shortcut so we write nn.Linear instead of torch.nn.Linear
+
+import torch.optim as optim
+────────────────────────────
+  - torch.optim contains OPTIMIZERS — algorithms that update the neural
+    network's weights during training.
+  - We use optim.Adam — a popular optimizer that adapts learning rate per
+    parameter. It's better than basic gradient descent.
+  - "as optim" is a shortcut.
+
+from torch.utils.data import DataLoader
+────────────────────────────────────────
+  - DataLoader takes a dataset and serves it in BATCHES.
+  - Instead of loading all 10,000 images at once (would crash memory),
+    DataLoader gives us 64 images at a time (one batch).
+  - It also SHUFFLES the data each epoch so the model doesn't memorize order.
+
+from torchvision.datasets import MNIST
+───────────────────────────────────────
+  - torchvision is a PyTorch library for computer vision.
+  - MNIST is a famous dataset of handwritten digits (0-9).
+  - Contains 60,000 training images + 10,000 test images.
+  - Each image is 28x28 pixels, grayscale (black and white).
+  - This import lets us download and load MNIST automatically.
+
+from torchvision import datasets, transforms
+──────────────────────────────────────────────
+  - transforms = image preprocessing tools (resize, normalize, convert to tensor)
+  - datasets = collection of standard datasets (MNIST, CIFAR, etc.)
+
+from torchvision.utils import save_image
+─────────────────────────────────────────
+  - save_image() saves a PyTorch tensor as a PNG/JPG image file.
+  - Used to save generated images to disk.
+
+import torchvision
+───────────────────
+  - Imported again so we can use torchvision.utils.make_grid()
+  - make_grid() arranges multiple images into a single grid image.
+
+import matplotlib.pyplot as plt
+─────────────────────────────────
+  - matplotlib is a plotting library.
+  - plt.imshow()   → display an image
+  - plt.show()     → actually render the plot
+  - plt.figure()   → create a new figure with custom size
+  - Used to visualize training progress.
+
+import os
+──────────
+  - Python's built-in module for file system operations.
+  - os.makedirs()  → create directories (folders)
+  - Used to create "vanilla_gan_outputs/" and "saved_models/" folders.
+
+
+================================================================================
+SECTION 2: DEVICE SELECTION (Line 13)
+================================================================================
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+─────────────────────────────────────────────────────────
+  WHAT: Checks if you have an NVIDIA GPU available.
+  
+  - "cuda"  → GPU (Graphics Processing Unit) — 10-100x faster for deep learning
+  - "cpu"   → Regular processor — works but much slower
+  
+  WHY: Neural network training involves millions of matrix multiplications.
+  GPUs have thousands of cores designed for parallel math, making them
+  dramatically faster than CPUs for this workload.
+  
+  HOW: torch.cuda.is_available() returns True if you have:
+    1. An NVIDIA GPU
+    2. CUDA drivers installed
+    3. PyTorch with CUDA support installed
+  
+  This is a ternary operator (shorthand if-else on one line).
+  Equivalent to:
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+
+================================================================================
+SECTION 3: HYPERPARAMETERS (Lines 16-20)
+================================================================================
+
+Hyperparameters are values YOU choose before training. They are NOT learned
+by the model — you set them manually. Finding good values is trial and error.
+
+latent_dim = 128
+─────────────────
+  WHAT: The size of the random noise vector fed to the Generator.
+  
+  WHY 128?: It's a common choice. Think of it as "128 knobs" that control
+  the generated image. Each combination of knob values produces a different
+  image. Too small (e.g., 10) → not enough variety. Too large (e.g., 1000)
+  → harder to train.
+  
+  WHAT IS LATENT SPACE?
+  Imagine a 128-dimensional space where each point maps to a unique image.
+  Nearby points produce similar images. The Generator learns this mapping
+  from random points → realistic images.
+
+img_shape = (1, 28, 28)
+──────────────────────────
+  WHAT: The shape of output images = (channels, height, width)
+  
+  - 1 channel  → grayscale (black & white). RGB would be 3 channels.
+  - 28 pixels  → height
+  - 28 pixels  → width
+  - Total: 1 × 28 × 28 = 784 pixels per image
+  
+  WHY THIS FORMAT (CHW)?
+  PyTorch uses "Channel-Height-Width" format, NOT "Height-Width-Channel" 
+  like regular images. This is because convolution operations are faster
+  when channels come first.
+
+batch_size = 64
+────────────────
+  WHAT: How many images the model processes at once in one step.
+  
+  WHY NOT 1 AT A TIME?
+  - Processing 1 image: gradients (learning signal) are very noisy/unstable
+  - Processing all 10,000: too much memory, slow per step
+  - 64 is a sweet spot: stable gradients, fits in memory, fast
+  
+  WHY 64? Powers of 2 (32, 64, 128, 256) align with GPU memory architecture,
+  making computation slightly more efficient.
+
+lr = 0.0002
+─────────────
+  WHAT: Learning rate — how big each weight update step is during training.
+  
+  ANALOGY: Imagine finding the lowest point in a valley while blindfolded.
+  - lr too big (0.1)  → You take huge steps and keep jumping over the valley
+  - lr too small (0.0000001) → You take tiny steps and it takes forever
+  - lr = 0.0002 → Small careful steps that eventually reach the bottom
+  
+  WHY 0.0002? This value comes from the original DCGAN paper by Radford et al.
+  (2016). It's been found to work well for GAN training.
+
+epochs = 500
+─────────────
+  WHAT: How many times the model sees the ENTIRE dataset during training.
+  
+  1 epoch = the model has processed all 10,000 images once.
+  500 epochs = the model sees each image 500 times.
+  
+  WHY SO MANY? Neural networks learn gradually. Seeing data once isn't enough.
+  Think of it like studying — you need to review material multiple times
+  to learn patterns.
+
+
+================================================================================
+SECTION 4: DATA PREPROCESSING (Lines 22-25)
+================================================================================
+
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize([0.5], [0.5])
+])
+───────────────────────────────────────
+
+transforms.Compose([...])
+  WHAT: Chains multiple image transformations into a pipeline.
+  Each image goes through transform 1 → transform 2 → ... in order.
+
+transforms.ToTensor()
+  WHAT: Converts a PIL image (regular image) to a PyTorch tensor.
+  ALSO: Automatically scales pixel values from [0, 255] → [0.0, 1.0]
+  
+  Before: pixel = 200 (integer, range 0-255)
+  After:  pixel = 0.784 (float, range 0-1)
+  
+  WHY? Neural networks work better with small floating-point numbers
+  than large integers.
+
+transforms.Normalize([0.5], [0.5])
+  WHAT: Shifts and scales pixel values from [0, 1] → [-1, 1]
+  
+  Formula: normalized = (pixel - mean) / std = (pixel - 0.5) / 0.5
+  
+  Example: pixel = 0.0 → (0.0 - 0.5) / 0.5 = -1.0
+           pixel = 0.5 → (0.5 - 0.5) / 0.5 =  0.0
+           pixel = 1.0 → (1.0 - 0.5) / 0.5 =  1.0
+  
+  [0.5] is one value because we have 1 channel (grayscale).
+  For RGB you'd write [0.5, 0.5, 0.5] (one per channel).
+  
+  WHY [-1, 1]?
+  The Generator's last layer uses Tanh which outputs [-1, 1].
+  Real images MUST be in the same range so the Discriminator
+  can fairly compare real vs fake images on the same scale.
+
+
+================================================================================
+SECTION 5: LOADING THE DATASET (Lines 27-34)
+================================================================================
+
+dataset = MNIST(
+    root="./data",
+    train=False,
+    transform=transform,
+    download=True
+)
+────────────────
+  root="./data"   → Download/store images in a folder called "data" in
+                     the current directory. "./" means current directory.
+  
+  train=False     → Use the TEST set (10,000 images) instead of training
+                     set (60,000). Smaller = faster training for experiments.
+                     For production, you'd use train=True.
+  
+  transform=transform → Apply our preprocessing pipeline (ToTensor + Normalize)
+                          to every image when it's loaded.
+  
+  download=True   → If the data isn't on disk yet, download it from the
+                     internet automatically.
+
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+─────────────────────────────────────────────────────────────────────
+  WHAT: Wraps the dataset to serve it in batches.
+  
+  batch_size=64   → Each iteration gives us 64 images at a time.
+  shuffle=True    → Randomize the order each epoch.
+  
+  WHY SHUFFLE?
+  If images always come in order (all 0s, then all 1s, then all 2s...),
+  the model might learn patterns based on the ORDER rather than the
+  actual image content. Shuffling prevents this.
+  
+  MATH: 10,000 images ÷ 64 per batch = ~156 batches per epoch
+
+
+================================================================================
+SECTION 6: VISUALIZE ONE SAMPLE (Lines 36-39)
+================================================================================
+
+img, label = dataset[0]
+─────────────────────────
+  WHAT: Get the FIRST image and its label from the dataset.
+  - img   → tensor of shape (1, 28, 28), values in [-1, 1]
+  - label → integer (0-9), the digit in the image
+  - dataset[0] is like accessing a list: first element
+
+plt.title(label)
+plt.imshow(img.squeeze(), cmap='gray')
+plt.show()
+─────────────────
+  plt.title(label)     → Put the digit label as the plot title
+  
+  img.squeeze()        → Remove dimension of size 1.
+    Before: shape (1, 28, 28)  — the "1" is the channel dimension
+    After:  shape (28, 28)     — just height × width
+    imshow needs 2D array for grayscale, not 3D.
+  
+  cmap='gray'          → Display in grayscale colormap (black-to-white)
+                          Without this, matplotlib would use colors.
+  
+  plt.show()           → Render and display the plot window.
+                          Without this, nothing appears on screen.
+
+
+================================================================================
+SECTION 7: GENERATOR ARCHITECTURE (Lines 42-55)
+================================================================================
+
+class Generator(nn.Module):
+──────────────────────────
+  WHAT: Defines the Generator neural network.
+  
+  class → Blueprint for creating objects (OOP concept).
+  nn.Module → PyTorch's base class for all neural networks.
+              Inheriting from it gives us:
+              - .parameters() → access to all learnable weights
+              - .to(device)   → move model to GPU/CPU
+              - .train()/.eval() → switch training/inference mode
+              - Automatic gradient computation
+
+    def __init__(self):
+        super().__init__()
+    ─────────────────────
+      __init__ → Constructor, called when you create: Generator()
+      super().__init__() → Call the parent class (nn.Module) constructor.
+        This is REQUIRED — it sets up PyTorch's internal tracking of
+        layers and parameters. Without it, nothing works.
+
+        self.model = nn.Sequential(
+        ────────────────────────────
+          nn.Sequential → Container that runs layers IN ORDER.
+          Input flows: Layer1 → Layer2 → Layer3 → ... → Output
+          
+          self.model → Stores it as an attribute so PyTorch can find the
+                        layers and their weights.
+
+            nn.Linear(latent_dim, 256),
+            ──────────────────────────
+              WHAT: Fully connected (dense) layer.
+              MATH: output = input × W + b
+                W = weight matrix of shape (128, 256)
+                b = bias vector of shape (256,)
+              
+              latent_dim=128 → input size (noise vector)
+              256           → output size (number of neurons)
+              
+              This layer has 128×256 + 256 = 33,024 learnable parameters.
+              
+              WHAT IS A LINEAR LAYER?
+              Every input neuron connects to every output neuron.
+              Each connection has a weight (multiplier).
+              The layer learns WHAT weights to use during training.
+
+            nn.LeakyReLU(0.2),
+            ──────────────────
+              WHAT: Activation function applied after Linear layer.
+              
+              WHY DO WE NEED ACTIVATION FUNCTIONS?
+              Without them, stacking Linear layers is useless:
+                Linear(Linear(x)) = another Linear(x)
+              Activations add NON-LINEARITY so the network can learn
+              complex, curved decision boundaries instead of just lines.
+              
+              LeakyReLU formula:
+                if x > 0:  output = x          (passes positive values)
+                if x ≤ 0:  output = 0.2 × x    (shrinks negative values)
+              
+              Example: input = 5  → output = 5
+                       input = -3 → output = -0.6
+              
+              WHY LeakyReLU and NOT regular ReLU?
+                ReLU:      if x ≤ 0: output = 0  (completely kills negatives)
+                LeakyReLU: if x ≤ 0: output = 0.2x (keeps small signal)
+              
+              "Dying ReLU" problem: with regular ReLU, if weights cause a
+              neuron to always output negative → it ALWAYS outputs 0 → the
+              neuron is "dead" and can never recover. LeakyReLU prevents
+              this by allowing a small gradient through negative values.
+              
+              0.2 = the "leak" factor. Common choice for GANs.
+
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2),
+            ────────────────────
+              Same pattern: Linear → LeakyReLU, growing in size.
+              The network gradually expands: 128 → 256 → 512 → 1024 → 784
+              
+              WHY EXPAND?
+              We start with a compact 128-dim noise and need to produce
+              a 784-pixel image. Gradual expansion lets the network
+              build increasingly complex features at each layer.
+
+            nn.Linear(1024, 28 * 28),
+            ─────────────────────────
+              WHAT: Final layer. 1024 → 784 (28×28 = 784 pixels)
+              Output: one value per pixel in the image.
+
+            nn.Tanh()
+            ─────────
+              WHAT: Squashes all output values to range [-1, 1]
+              Formula: tanh(x) = (e^x - e^-x) / (e^x + e^-x)
+              
+              WHY TANH?
+              Our real images are normalized to [-1, 1] (because of
+              Normalize([0.5], [0.5])). The Generator output MUST be in
+              the same range so the Discriminator can compare them fairly.
+              
+              If Generator output was [0, 100] and real images were [-1, 1],
+              the Discriminator could trivially tell them apart by range alone.
+
+    def forward(self, z):
+        img = self.model(z)
+        return img.view(img.size(0), *img_shape)
+    ────────────────────────────────────────────
+      forward() → Defines WHAT HAPPENS when you call generator(input).
+                   PyTorch calls this automatically.
+      
+      z → Input: random noise tensor of shape (batch_size, 128)
+      
+      self.model(z) → Passes z through all the Sequential layers.
+        Output shape: (batch_size, 784) — a flat vector per image
+      
+      img.view(img.size(0), *img_shape) → RESHAPE the flat vector to an image
+        img.size(0) = batch_size (e.g., 64)
+        *img_shape  = unpacks (1, 28, 28) → 1, 28, 28
+        
+        Before: shape (64, 784)        — flat vector
+        After:  shape (64, 1, 28, 28)  — batch of images
+        
+        .view() just reorganizes the same data into a different shape.
+        No data is changed — just how it's arranged.
+        
+        WHY RESHAPE?
+        The rest of the code (display, convolutions) expects images in
+        (batch, channels, height, width) format, not flat vectors.
+
+
+================================================================================
+SECTION 8: DISCRIMINATOR ARCHITECTURE (Lines 57-72)
+================================================================================
+
+class Discriminator(nn.Module):
+───────────────────────────────
+  WHAT: A binary classifier that takes an image and outputs:
+        "probability this image is real" (0 to 1)
+
+        self.model = nn.Sequential(
+            nn.Linear(28 * 28, 512),
+            ────────────────────────
+              Input: 784 (flattened 28×28 image) → 512 neurons
+              The image enters as a flat vector of pixel values.
+
+            nn.LeakyReLU(0.2),
+
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            ────────────────────
+              Progressively SHRINKS: 784 → 512 → 256 → 1
+              Opposite of Generator (which expands).
+              
+              WHY SHRINK?
+              We're compressing a 784-pixel image down to a single
+              number (real or fake). Each layer extracts higher-level
+              features and throws away unnecessary details.
+
+            nn.Linear(256, 1),
+            ──────────────────
+              Output: single number = "realness score"
+
+            nn.Sigmoid()
+            ────────────
+              WHAT: Squashes output to [0, 1] range
+              Formula: sigmoid(x) = 1 / (1 + e^(-x))
+              
+              WHY SIGMOID?
+              We need a probability: 0 = definitely fake, 1 = definitely real
+              Sigmoid naturally maps any number to a valid probability.
+              
+              This works with BCELoss (Binary Cross-Entropy) which expects
+              probabilities as input.
+
+    def forward(self, img):
+        img = img.view(img.size(0), -1)
+        return self.model(img)
+    ─────────────────────────────────
+      img.view(img.size(0), -1) → FLATTEN the image
+        img.size(0) = batch_size
+        -1 = "calculate this dimension automatically"
+        
+        Before: (64, 1, 28, 28) — batch of images
+        After:  (64, 784)       — batch of flat vectors
+        
+        WHY FLATTEN?
+        nn.Linear expects a 1D input (vector), not a 2D image.
+        Flattening converts each 28×28 image into a 784-length vector.
+        
+        (This is a limitation of vanilla GAN — DCGAN uses convolutions
+        which CAN work with 2D images directly.)
+
+
+================================================================================
+SECTION 9: CREATING MODELS AND LOSS (Lines 74-81)
+================================================================================
+
+generator = Generator().to(device)
+discriminator = Discriminator().to(device)
+──────────────────────────────────────────
+  Generator()    → Creates an INSTANCE (actual object) of the Generator class.
+                    All weights are randomly initialized.
+  .to(device)    → Moves the entire model (all weights) to GPU or CPU.
+                    If device="cuda", all computations happen on GPU.
+  
+  At this point:
+  - Generator has random weights → produces pure noise images
+  - Discriminator has random weights → makes random predictions
+  - Training will adjust these weights to make them useful.
+
+adversarial_loss = nn.BCELoss()
+────────────────────────────────
+  WHAT: Binary Cross-Entropy Loss function.
+  
+  Formula: BCE = -[y × log(p) + (1-y) × log(1-p)]
+    y = actual label (1 for real, 0 for fake)
+    p = predicted probability (discriminator's output)
+  
+  EXAMPLES:
+    Discriminator says p=0.9 for a REAL image (y=1):
+      Loss = -[1 × log(0.9) + 0 × log(0.1)] = -log(0.9) = 0.105  ← small loss, good!
+    
+    Discriminator says p=0.1 for a REAL image (y=1):
+      Loss = -[1 × log(0.1)] = -log(0.1) = 2.302  ← big loss, bad!
+    
+    Discriminator says p=0.1 for a FAKE image (y=0):
+      Loss = -[0 + 1 × log(0.9)] = 0.105  ← small loss, good!
+  
+  WHY BCE?
+  It's the standard loss for binary classification (real/fake is binary).
+  It heavily penalizes confident WRONG predictions.
+
+optimizer_G = optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.999))
+optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
+────────────────────────────────────────────────────────────────────────────
+  WHAT: Adam optimizer — updates weights to minimize loss.
+  
+  generator.parameters() → All trainable weights in the Generator.
+  lr=0.0002             → Learning rate (step size).
+  
+  betas=(0.5, 0.999)   → Adam-specific settings:
+    beta1=0.5   → Momentum factor. Controls how much the optimizer
+                   "remembers" the direction of previous updates.
+                   0.5 is lower than default (0.9) — less momentum.
+                   This is recommended for GAN training to prevent
+                   the optimizer from overshooting.
+    beta2=0.999 → Controls how much it adapts learning rate per parameter.
+                   Default value, works well in practice.
+  
+  WHY SEPARATE OPTIMIZERS?
+  Generator and Discriminator are trained ALTERNATELY:
+  - When training D: only D's weights should change (G stays fixed)
+  - When training G: only G's weights should change (D stays fixed)
+  Having separate optimizers makes this possible.
+  
+  WHAT DOES AN OPTIMIZER DO?
+  1. Look at the loss (how bad the prediction was)
+  2. Compute gradients (which direction to change each weight)
+  3. Update weights: new_weight = old_weight - lr × gradient
+
+
+================================================================================
+SECTION 10: FIXED NOISE AND OUTPUT FOLDER (Lines 83-85)
+================================================================================
+
+fixed_z = torch.randn(16, latent_dim, device=device)
+──────────────────────────────────────────────────────
+  WHAT: Creates 16 random noise vectors and saves them.
+  
+  torch.randn(16, 128) → 16 vectors, each with 128 random numbers
+                          drawn from a Normal distribution (mean=0, std=1)
+  
+  WHY FIXED?
+  These SAME 16 noise vectors are used at every save point to generate
+  images. This way you can see how the Generator's output for the SAME
+  input IMPROVES over epochs.
+  
+  If we used new random noise each time, we couldn't tell if the model
+  improved or just got different random inputs.
+
+os.makedirs("vanilla_gan_outputs", exist_ok=True)
+──────────────────────────────────────────────────
+  WHAT: Creates the output folder if it doesn't exist.
+  exist_ok=True → Don't crash if the folder already exists.
+
+
+================================================================================
+SECTION 11: SAVE IMAGES FUNCTION (Lines 87-108)
+================================================================================
+
+def save_generated_images(epoch):
+    generator.eval()
+    ────────────────
+      WHAT: Switch Generator to EVALUATION MODE.
+      
+      WHY? Some layers (like BatchNorm, Dropout) behave differently
+      during training vs inference:
+        Training: BatchNorm uses batch statistics
+        Eval:     BatchNorm uses running average statistics
+      
+      For Vanilla GAN there's no BatchNorm, but it's good practice.
+
+    with torch.no_grad():
+        gen_imgs = generator(fixed_z).detach().cpu()
+    ─────────────────────────────────────────────────
+      torch.no_grad() → Tell PyTorch "DON'T track gradients here."
+        WHY? We're just generating images for display, not training.
+        Tracking gradients uses memory and is unnecessary here.
+      
+      generator(fixed_z) → Feed the 16 fixed noise vectors through Generator.
+        Output shape: (16, 1, 28, 28) — 16 generated images.
+      
+      .detach() → Disconnect from computation graph (frees memory).
+      .cpu()    → Move from GPU to CPU (needed for matplotlib/saving).
+
+    grid = torchvision.utils.make_grid(gen_imgs, nrow=4, normalize=True)
+    ─────────────────────────────────────────────────────────────────────
+      WHAT: Arranges 16 images into a 4×4 grid (single image).
+      nrow=4     → 4 images per row (16 images → 4 rows × 4 columns)
+      normalize=True → Rescale pixel values to [0, 1] for display.
+
+    plt.imshow(grid.permute(1, 2, 0).squeeze(), cmap="gray")
+    ──────────────────────────────────────────────────────────
+      grid.permute(1, 2, 0) → Rearrange dimensions:
+        PyTorch format: (Channels, Height, Width) = (C, H, W)
+        Matplotlib needs: (Height, Width, Channels) = (H, W, C)
+        permute(1,2,0) reorders: dimension 1→0, 2→1, 0→2
+      
+      .squeeze() → Remove dimension of size 1 (channel dim for grayscale).
+      cmap="gray" → Display in grayscale.
+
+    save_image(gen_imgs, f"vanilla_gan_outputs/epoch_{epoch}.png", ...)
+    ───────────────────────────────────────────────────────────────────
+      WHAT: Also saves the grid to a PNG file on disk.
+      These files let you review training progress later.
+
+    generator.train()
+    ─────────────────
+      WHAT: Switch Generator back to TRAINING MODE.
+      Must restore this before continuing training.
+
+
+================================================================================
+SECTION 12: THE TRAINING LOOP — THE HEART OF THE GAN (Lines 110-155)
+================================================================================
+
+THE BIG PICTURE:
+  GAN training is a GAME between two players:
+  - Generator (forger): tries to create fake images that look real
+  - Discriminator (detective): tries to tell real from fake
+  
+  They train ALTERNATELY:
+  Step 1: Train Discriminator to get better at detecting fakes
+  Step 2: Train Generator to get better at fooling Discriminator
+  Repeat thousands of times.
+
+for epoch in range(epochs):
+    for i, (imgs, _) in enumerate(dataloader):
+    ─────────────────────────────────────────
+      OUTER LOOP: epoch 0 to 499 (500 total epochs)
+      INNER LOOP: iterate through all batches in the dataset
+      
+      (imgs, _) → DataLoader returns (images, labels) tuples.
+                   imgs  = batch of 64 real images, shape (64, 1, 28, 28)
+                   _     = labels (which digit) — we IGNORE these with "_"
+                            because Vanilla GAN doesn't care about classes.
+      
+      enumerate() → Gives us the index i along with the data.
+                     Used for printing progress every 400 batches.
+
+        real_imgs = imgs.to(device)
+        ────────────────────────────
+          Move real images to GPU (or keep on CPU if no GPU).
+
+        batch_size_curr = real_imgs.size(0)
+        ─────────────────────────────────────
+          WHAT: Get actual batch size.
+          WHY "curr"? The LAST batch might be smaller than 64.
+            10,000 images ÷ 64 = 156 full batches + 1 batch of 16.
+          We need the exact size for creating label tensors.
+
+        valid = torch.ones(batch_size_curr, 1, device=device)
+        fake = torch.zeros(batch_size_curr, 1, device=device)
+        ─────────────────────────────────────────────────────
+          valid = tensor of 1s, shape (64, 1) → "these are REAL images"
+          fake  = tensor of 0s, shape (64, 1) → "these are FAKE images"
+          
+          These are the TARGET labels for BCELoss:
+          - For real images, discriminator should output 1 (real)
+          - For fake images, discriminator should output 0 (fake)
+
+    ═══════════════════════════════════════════
+    PART A: TRAIN DISCRIMINATOR
+    ═══════════════════════════════════════════
+    
+    GOAL: Teach D to correctly classify real images as real
+          AND fake images as fake.
+
+        optimizer_D.zero_grad()
+        ───────────────────────
+          WHAT: Reset all gradients to zero.
+          
+          WHY? PyTorch ACCUMULATES gradients by default. If we don't
+          reset, gradients from the previous step would ADD to current
+          gradients, giving wrong updates.
+          
+          Must call this BEFORE computing loss for each training step.
+
+        real_loss = adversarial_loss(discriminator(real_imgs), valid)
+        ─────────────────────────────────────────────────────────────
+          STEP BY STEP:
+          1. discriminator(real_imgs) → Feed 64 real images to Discriminator
+             Output: 64 scores, each between 0 and 1
+          2. adversarial_loss(..., valid) → Compare scores to target "1" (real)
+             BCELoss measures how far the predictions are from "1"
+          
+          IF D IS GOOD: It outputs values close to 1 → low loss
+          IF D IS BAD:  It outputs values close to 0 → high loss
+
+        z = torch.randn(batch_size_curr, latent_dim, device=device)
+        gen_imgs = generator(z)
+        ──────────────────────────
+          z         → Fresh random noise (64 vectors of 128 random numbers)
+          gen_imgs  → Generator produces 64 fake images from that noise
+                      Shape: (64, 1, 28, 28)
+
+        fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
+        ────────────────────────────────────────────────────────────────────
+          1. gen_imgs.detach() → CRITICAL! Detach fake images from Generator's
+             computation graph.
+             
+             WHY DETACH?
+             We're training the DISCRIMINATOR here, not the Generator.
+             If we don't detach, gradients would flow back through the
+             fake images into the Generator and update its weights too.
+             We only want to update D's weights in this step.
+          
+          2. discriminator(gen_imgs.detach()) → D scores the fake images
+          3. adversarial_loss(..., fake) → Compare to target "0" (fake)
+          
+          IF D IS GOOD: It outputs values close to 0 → low loss
+          IF D IS BAD:  It outputs values close to 1 → high loss
+
+        d_loss = real_loss + fake_loss
+        ───────────────────────────────
+          Total D loss = how badly it classified real images
+                       + how badly it classified fake images
+          Both should be low for a good discriminator.
+
+        d_loss.backward()
+        ──────────────────
+          WHAT: BACKPROPAGATION — computes gradients.
+          
+          PyTorch traces back through every operation and calculates:
+          "How should each weight change to reduce this loss?"
+          
+          The gradient for each weight is stored in weight.grad
+
+        optimizer_D.step()
+        ──────────────────
+          WHAT: Actually UPDATE the Discriminator's weights.
+          
+          For each weight in D:
+            new_weight = old_weight - learning_rate × gradient
+          
+          After this, D is slightly better at distinguishing real from fake.
+
+    ═══════════════════════════════════════════
+    PART B: TRAIN GENERATOR
+    ═══════════════════════════════════════════
+    
+    GOAL: Teach G to create images that fool the Discriminator
+          (make D think fake images are real).
+
+        optimizer_G.zero_grad()
+        ───────────────────────
+          Reset Generator's gradients to zero.
+
+        g_loss = adversarial_loss(discriminator(gen_imgs), valid)
+        ─────────────────────────────────────────────────────────
+          THE TRICK: Notice we pass "valid" (ones) as the target,
+          NOT "fake" (zeros)!
+          
+          1. discriminator(gen_imgs) → D scores the fake images
+             NOTE: NO .detach() this time! We WANT gradients to flow
+             back through D into G, so G can learn.
+          2. adversarial_loss(..., valid) → Compare D's scores to 1.0
+          
+          This means: "The Generator WANTS the Discriminator to say 1
+          (real) for its fake images."
+          
+          IF D SAYS 1 (fooled): loss is low → G is doing great
+          IF D SAYS 0 (caught): loss is high → G needs to improve
+          
+          THE GRADIENT FLOW:
+          g_loss → flows back through → discriminator(gen_imgs)
+                 → flows back through → gen_imgs = generator(z)
+                 → updates Generator's weights
+          
+          G learns: "What changes to my weights will make D more likely
+          to output 1 for my images?"
+
+        g_loss.backward()
+        optimizer_G.step()
+        ──────────────────
+          Compute gradients and update Generator's weights.
+          After this, G is slightly better at creating realistic images.
+
+    ═══════════════════════════════════════════
+    PRINTING PROGRESS
+    ═══════════════════════════════════════════
+
+        if i % 400 == 0:
+        ────────────────
+          Print loss values every 400 batches.
+          i % 400 == 0 → True when i is 0, 400, 800, etc.
+          "%" is the modulo operator (remainder after division).
+
+          f"D Loss: {d_loss.item():.4f}"
+          ───────────────────────────────
+            .item()  → Converts a 1-element tensor to a Python number.
+            :.4f     → Format as float with 4 decimal places.
+
+    if (epoch + 1) in [1, 50, 100, 500, 1000]:
+        save_generated_images(epoch + 1)
+    ─────────────────────────────────────────
+      Save generated images at milestone epochs to track progress.
+      (epoch + 1) because epoch starts at 0 but we want 1-indexed display.
+
+
+================================================================================
+SECTION 13: SAVING THE TRAINED MODEL (Lines 157-168)
+================================================================================
+
+os.makedirs("saved_models", exist_ok=True)
+────────────────────────────────────────────
+  Create the folder if it doesn't exist.
+
+torch.save({
+    'generator_state_dict': generator.state_dict(),
+    'discriminator_state_dict': discriminator.state_dict(),
+    'optimizer_G_state_dict': optimizer_G.state_dict(),
+    'optimizer_D_state_dict': optimizer_D.state_dict(),
+    'epochs': epochs,
+}, "saved_models/vanilla_gan.pth")
+────────────────────────────────────────────
+  WHAT: Saves everything needed to resume training or use the model.
+  
+  .state_dict() → Returns a dictionary of all weights and biases.
+    Example: {"model.0.weight": tensor(...), "model.0.bias": tensor(...), ...}
+  
+  We save a DICTIONARY with multiple items:
+  
+  generator_state_dict      → Generator's learned weights
+                                (needed to generate images later)
+  discriminator_state_dict  → Discriminator's learned weights
+                                (needed for real/fake prediction)
+  optimizer_G_state_dict    → Optimizer's internal state (momentum, etc.)
+                                (needed to RESUME training from where we stopped)
+  optimizer_D_state_dict    → Same for Discriminator's optimizer
+  epochs                    → How many epochs we trained
+  
+  WHY .pth?
+  It's a PyTorch convention. The file is actually a Python pickle file
+  containing serialized tensors. You could use .pt too.
+  
+  WHY SAVE OPTIMIZER STATES?
+  Adam optimizer tracks momentum (running averages) for each weight.
+  If you want to resume training later, you need these. Without them,
+  the optimizer starts fresh and training quality drops temporarily.
+
+
+================================================================================
+SECTION 14: THE GAN TRAINING DYNAMICS — WHY IT WORKS
+================================================================================
+
+ANALOGY: COUNTERFEITER VS DETECTIVE
+
+  Imagine a counterfeiter (Generator) trying to make fake money:
+  
+  Week 1: Counterfeiter draws bills with crayons. Detective catches all fakes.
+  Week 10: Counterfeiter uses a printer. Detective learns to check paper quality.
+  Week 50: Counterfeiter uses real paper. Detective learns to check watermarks.
+  Week 100: Counterfeiter adds watermarks. Detective uses UV light.
+  ...and so on.
+  
+  Both keep improving because the other keeps getting better.
+  Eventually, the counterfeiter produces bills so good that even the
+  expert detective can't reliably tell them from real bills.
+
+NASH EQUILIBRIUM:
+  The ideal end state is when:
+  - Generator produces perfect images (indistinguishable from real)
+  - Discriminator outputs 0.5 for everything (can't tell the difference)
+  This is called Nash Equilibrium.
+
+COMMON PROBLEMS:
+  - Mode Collapse: Generator only produces 1 type of image (e.g., only 3s)
+  - Training Instability: Losses oscillate wildly, images get worse
+  - Vanishing Gradients: D becomes too good too fast, G can't learn
+
+  These are mitigated by:
+  - Careful learning rate choice (0.0002)
+  - Adam optimizer with beta1=0.5
+  - LeakyReLU instead of ReLU
+  - Training D and G alternately with equal steps
+
+
+================================================================================
+SUMMARY OF DATA FLOW
+================================================================================
+
+TRAINING:
+  Random noise z (128-dim)
+       ↓
+  Generator: Linear(128→256→512→1024→784) + Tanh
+       ↓
+  Fake image (1, 28, 28) in range [-1, 1]
+       ↓
+  Discriminator: Linear(784→512→256→1) + Sigmoid
+       ↓
+  Score (0 to 1): probability of being real
+       ↓
+  BCELoss: compare score to target (0 or 1)
+       ↓
+  Backpropagation: compute gradients
+       ↓
+  Optimizer: update weights
+
+INFERENCE (after training):
+  Random noise z (128-dim) → Generator → Fake image → Done!
+  (No Discriminator needed for generating images)
+
+REAL/FAKE PREDICTION:
+  Image → Preprocess (resize, normalize) → Discriminator → Score → Real or Fake

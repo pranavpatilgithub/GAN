@@ -15,7 +15,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # Hyperparameters
 latent_dim = 128
 img_shape = (1, 28, 28)
-batch_size = 64
+batch_size = 16
 lr = 0.0002
 epochs = 500
 
@@ -24,12 +24,16 @@ transform = transforms.Compose([
     transforms.Normalize([0.5], [0.5])
 ])
 
-dataset = MNIST(
-    root="./data",
-    train=False,
-    transform=transform,
-    download=True
-)
+TARGET_DIGIT = 8   # change to 0-9
+
+full_dataset = MNIST(root="./data", train=True, transform=transform, download=True)
+
+indices = [i for i, (_, label) in enumerate(full_dataset) if label == TARGET_DIGIT]
+
+from torch.utils.data import Subset
+dataset = Subset(full_dataset, indices)
+
+print(f"Training on digit '{TARGET_DIGIT}' — {len(dataset)} images")
 
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -82,7 +86,6 @@ optimizer_G = optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.999))
 optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
 
 fixed_z = torch.randn(16, latent_dim, device=device)
-
 os.makedirs("vanilla_gan_outputs", exist_ok=True)
 
 def save_generated_images(epoch):

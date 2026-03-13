@@ -6,27 +6,31 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
+from torch.utils.data import Subset
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 latent_dim = 100
 batch_size = 128
-epochs = 500
+epochs = 1000
 lr = 0.0002
 img_channels = 1
 
 transform = transforms.Compose([
-    transforms.Resize(28),
     transforms.ToTensor(),
     transforms.Normalize([0.5], [0.5])
 ])
 
-dataset = MNIST(
-    root="/kaggle/working",
-    train=False,
-    transform=transform,
-    download=True
-)
+TARGET_DIGIT = 8
+
+full_dataset = MNIST(root="/kaggle/working", train=True,   # ← fix train=True
+                     transform=transform, download=True)
+
+indices = [i for i, (_, label) in enumerate(full_dataset) if label == TARGET_DIGIT]
+dataset = Subset(full_dataset, indices)
+
+print(f"Training on digit '{TARGET_DIGIT}' — {len(dataset)} images")
+
 
 dataloader = DataLoader(
     dataset,
@@ -81,6 +85,35 @@ criterion = nn.BCELoss()
 
 optimizer_G = optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.999))
 optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
+
+fixed_z = torch.randn(16, latent_dim, device=device)
+os.makedirs("dc_gan_outputs", exist_ok=True)
+
+def save_generated_images(epoch):
+    generator.eval()
+    with torch.no_grad():
+        gen_imgs = generator(fixed_z).detach().cpu()
+
+    grid = torchvision.utils.make_grid(
+        gen_imgs,
+        nrow=4,
+        normalize=True
+    )
+
+    plt.figure(figsize=(4, 4))
+    plt.imshow(grid.permute(1, 2, 0).squeeze(), cmap="gray")
+    plt.axis("off")
+    plt.title(f"Epoch {epoch}")
+    plt.show()
+
+    save_image(
+        gen_imgs,
+        f"dc_gan_outputs/epoch_{epoch}.png",
+        nrow=4,
+        normalize=True
+    )
+
+    generator.train()
 
 for epoch in range(epochs):
     for i, (imgs, _) in enumerate(dataloader):
