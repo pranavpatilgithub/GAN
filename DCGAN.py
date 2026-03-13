@@ -23,7 +23,7 @@ transform = transforms.Compose([
 
 TARGET_DIGIT = 8
 
-full_dataset = MNIST(root="/kaggle/working", train=True,   # ← fix train=True
+full_dataset = MNIST(root="/kaggle/working", train=True,   
                      transform=transform, download=True)
 
 indices = [i for i, (_, label) in enumerate(full_dataset) if label == TARGET_DIGIT]

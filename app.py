@@ -68,33 +68,33 @@ def to_display(img_tensor):
 
 
 # ---- Tabs ----
-tab_upload, tab_quick, tab_realfake = st.tabs(["Upload & Generate", "Quick Generate", "Real or Fake?"])
+tab_quick, tab_realfake = st.tabs(["Quick Generate", "Real or Fake?"])
 
 # -- Tab 1: Upload images → generate same count --
-with tab_upload:
-    uploaded_files = st.file_uploader(
-        "Upload image(s) — one generated image per upload",
-        type=["png", "jpg", "jpeg", "bmp"],
-        accept_multiple_files=True,
-    )
+# with tab_upload:
+#     uploaded_files = st.file_uploader(
+#         "Upload image(s) — one generated image per upload",
+#         type=["png", "jpg", "jpeg", "bmp"],
+#         accept_multiple_files=True,
+#     )
 
-    if uploaded_files:
-        num = len(uploaded_files)
-        gen_kwargs = {"label": label} if is_conditional else {}
-        gen_imgs = model_cfg["generate_fn"](generator, num, device, **gen_kwargs)
+#     if uploaded_files:
+#         num = len(uploaded_files)
+#         gen_kwargs = {"label": label} if is_conditional else {}
+#         gen_imgs = model_cfg["generate_fn"](generator, num, device, **gen_kwargs)
 
-        st.subheader(f"Results ({num} image{'s' if num > 1 else ''})")
+#         st.subheader(f"Results ({num} image{'s' if num > 1 else ''})")
 
-        for idx, (uf, gi) in enumerate(zip(uploaded_files, gen_imgs)):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.caption("Uploaded")
-                st.image(Image.open(uf), use_container_width=True)
-            with col2:
-                st.caption("Generated")
-                st.image(to_display(gi), use_container_width=True, clamp=True)
-    else:
-        st.info("Upload one or more images to generate GAN outputs.")
+#         for idx, (uf, gi) in enumerate(zip(uploaded_files, gen_imgs)):
+#             col1, col2 = st.columns(2)
+#             with col1:
+#                 st.caption("Uploaded")
+#                 st.image(Image.open(uf), use_container_width=True)
+#             with col2:
+#                 st.caption("Generated")
+#                 st.image(to_display(gi), use_container_width=True, clamp=True)
+#     else:
+#         st.info("Upload one or more images to generate GAN outputs.")
 
 # -- Tab 2: Generate N random samples (no upload needed) --
 with tab_quick:
